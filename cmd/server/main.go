@@ -32,11 +32,15 @@ func main() {
 	repo := repository.NewEventRepository(conn)
 
 	// Buffer single-events explicitly to bypass socket constraints
-	// Flushes every 50ms guaranteed, or instantly if 500 hit
-	b := batcher.NewBatcher(repo, 200000, 5000, 50*time.Millisecond)
+	// Flushes every 100ms guaranteed, or instantly if 500 hit
+	// TODO: implement Kafka or RabbitMQ to ensure zero data loss
+	// TODO: metrics like Prometheus to track batcher queue depth, flush latency, error rates.
+	b := batcher.NewBatcher(repo, 200000, 5000, 100*time.Millisecond)
 
 	// Setup HTTP Server
 	mux := http.NewServeMux()
+	// TODO: Rate limiting
+	// TODO: Authentication by api key or jwt token
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
