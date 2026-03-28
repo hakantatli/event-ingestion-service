@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest-alpine
+    container_name: clickhouse-server
+    ports:
+      - "8123:8123" # HTTP port
+      - "9000:9000" # Native port for clickhouse-go client
+    environment:
+      - CLICKHOUSE_USER=event_user
+      - CLICKHOUSE_PASSWORD=event_password
+      - CLICKHOUSE_DB=events_db
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    ulimits: # Required for high-performance ClickHouse deployments
+      nofile:
+        soft: 262144
+        hard: 262144
+
+volumes:
+  clickhouse-data:
