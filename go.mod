@@ -1,4 +1,4 @@
-module github.com/hakantatli/event-ingest-service-clickhouse
+module github.com/hakantatli/event-ingestion-service
 
 go 1.26.0
 
