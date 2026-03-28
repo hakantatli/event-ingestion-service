@@ -17,4 +17,7 @@ run: build
 # Test commands
 
 load-test:
-	go run scripts/loadtest.go bulk
+	go run scripts/loadtest.go -mode=single
+
+load-test-bulk:
+	go run scripts/loadtest.go -mode=bulk
