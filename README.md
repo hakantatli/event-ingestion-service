@@ -12,28 +12,6 @@ make up && make run
 ```
 it will be available at http://localhost:8080
 
-## Assumptions, design decisions, and trade-offs.
-1. Why ClickHouse over PostgreSQL?
-Event data is append-only. We never update or delete rows. The primary read pattern is analytical aggregation (counts, uniques, group-by over millions of rows). ClickHouse's columnar storage and vectorized query engine are purpose-built for this workload. PostgreSQL would require significant tuning (partitioning, BRIN indexes) to handle 20k TPS ingestion.
-
-2. Why two separate ingestion endpoints?
-ClickHouse performs poorly with many tiny single row inserts — each creates a separate data "part" on disk. POST /events uses an async batcher to accumulate single events into large blocks before writing. POST /events/bulk lets clients who already have batched data skip the batcher and write directly. Different trade-offs: 202 (async, fast) vs 201 (sync, confirmed).
-
-3. What happens if the server crashes before the batcher flushes?
-Events in the memory buffer are lost. This is the explicit trade-off for high throughput. To mitigate: graceful shutdown drains the buffer on SIGTERM. For zero data loss in production, I'd put a durable message broker in front or use a que system like RabbitMQ.
-
-4. What could be done differently for the production
-* **Message Broker:** Implement a message broker such as Kafka or RabbitMQ before the ingestion service to ensure zero data loss and better handle traffic spikes.
-* **Observability:** Integrate metrics using tools like Prometheus to track batcher queue depth, flush latency, and error rates.
-* **Traffic Control:** Introduce rate limiting to prevent abuse and protect the system from being overwhelmed.
-* **Security:** Secure the API using an authentication mechanism like API keys or JWT tokens.
-* **Database Management:** Integrate a database migration tool to safely handle ClickHouse schema evolution.
-
-5. Timestamp Validation Window
-We assume that events are posted near-instantly by clients. Therefore, the server enforces a 1-hour validation window (past or future) for event timestamps. Depending on the exact real-time requirements, this interval could be configured to be even tighter in production.
-
-6. Data Accuracy & Idempotency
-Since the api doesn't require the full realtime, we implemented a 10s cache on metrics endpoint. Since idempotency is required, the `FINAL` statement is added to fetch the data after deduplication process is run which required by ClickHouse.
 
 
 ## 🔌 API Reference
@@ -98,6 +76,30 @@ curl "http://localhost:8080/metrics?event_name=product_view&group_by=toStartOfHo
 
 **Supported `group_by` values:** `channel`, `campaign_id`, `toStartOfHour(timestamp)`, `toStartOfDay(timestamp)`
 
+
+
+## Assumptions, design decisions, and trade-offs.
+1. Why ClickHouse over PostgreSQL?
+Event data is append-only. We never update or delete rows. The primary read pattern is analytical aggregation (counts, uniques, group-by over millions of rows). ClickHouse's columnar storage and vectorized query engine are purpose-built for this workload. PostgreSQL would require significant tuning (partitioning, BRIN indexes) to handle 20k TPS ingestion.
+
+2. Why two separate ingestion endpoints?
+ClickHouse performs poorly with many tiny single row inserts — each creates a separate data "part" on disk. POST /events uses an async batcher to accumulate single events into large blocks before writing. POST /events/bulk lets clients who already have batched data skip the batcher and write directly. Different trade-offs: 202 (async, fast) vs 201 (sync, confirmed).
+
+3. What happens if the server crashes before the batcher flushes?
+Events in the memory buffer are lost. This is the explicit trade-off for high throughput. To mitigate: graceful shutdown drains the buffer on SIGTERM. For zero data loss in production, I'd put a durable message broker in front or use a que system like RabbitMQ.
+
+4. What could be done differently for the production
+* **Message Broker:** Implement a message broker such as Kafka or RabbitMQ before the ingestion service to ensure zero data loss and better handle traffic spikes.
+* **Observability:** Integrate metrics using tools like Prometheus to track batcher queue depth, flush latency, and error rates.
+* **Traffic Control:** Introduce rate limiting to prevent abuse and protect the system from being overwhelmed.
+* **Security:** Secure the API using an authentication mechanism like API keys or JWT tokens.
+* **Database Management:** Integrate a database migration tool to safely handle ClickHouse schema evolution.
+
+5. Timestamp Validation Window
+We assume that events are posted near-instantly by clients. Therefore, the server enforces a 1-hour validation window (past or future) for event timestamps. Depending on the exact real-time requirements, this interval could be configured to be even tighter in production.
+
+6. Data Accuracy & Idempotency
+Since the api doesn't require the full realtime, we implemented a 10s cache on metrics endpoint. Since idempotency is required, the `FINAL` statement is added to fetch the data after deduplication process is run which required by ClickHouse.
 
 
 ## 🔥 Load Testing
