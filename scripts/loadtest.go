@@ -40,7 +40,7 @@ func generateEvent(i int) domain.Event {
 	return domain.Event{
 		EventName:  eventNames[rand.Intn(len(eventNames))],
 		UserID:     fmt.Sprintf("user_%d", rand.Intn(10000)),
-		Timestamp:  time.Now().Unix() - int64(rand.Intn(86400*30)),
+		Timestamp:  time.Now().Unix() - int64(rand.Intn(3600)),
 		Channel:    channels[rand.Intn(len(channels))],
 		CampaignID: fmt.Sprintf("cmp_%d", rand.Intn(100)),
 		Tags:       []string{"load_test"},
