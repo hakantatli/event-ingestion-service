@@ -43,6 +43,12 @@ func validateEvent(e domain.Event) error {
 	if e.Timestamp <= 0 {
 		return fmt.Errorf("invalid timestamp")
 	}
+
+	now := time.Now().Unix()
+	if e.Timestamp < now-3600 || e.Timestamp > now+3600 {
+		return fmt.Errorf("timestamp must be within 1 hour of current time")
+	}
+
 	return nil
 }
 

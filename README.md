@@ -29,6 +29,9 @@ Events in the memory buffer are lost. This is the explicit trade-off for high th
 * **Security:** Secure the API using an authentication mechanism like API keys or JWT tokens.
 * **Database Management:** Integrate a database migration tool to safely handle ClickHouse schema evolution.
 
+5. Timestamp Validation Window
+We assume that events are posted near-instantly by clients. Therefore, the server enforces a 1-hour validation window (past or future) for event timestamps. Depending on the exact real-time requirements, this interval could be configured to be even tighter in production.
+
 ## 🔌 API Reference
 
 ### 1. Ingest a Single Event
@@ -39,7 +42,7 @@ curl -X POST http://localhost:8080/events \
   -d '{
     "event_name": "product_view",
     "user_id": "user_987",
-    "timestamp": 1723475612,
+    "timestamp": 1774775208,
     "channel": "web",
     "campaign_id": "cmp_123",
     "tags": ["electronics", "flash_sale"],

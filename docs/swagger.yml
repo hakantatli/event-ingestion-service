@@ -90,7 +90,7 @@ components:
           example: user_987
         timestamp:
           type: integer
-          example: 1723475612
+          example: 1774775208
         channel:
           type: string
           example: web
