@@ -32,6 +32,10 @@ Events in the memory buffer are lost. This is the explicit trade-off for high th
 5. Timestamp Validation Window
 We assume that events are posted near-instantly by clients. Therefore, the server enforces a 1-hour validation window (past or future) for event timestamps. Depending on the exact real-time requirements, this interval could be configured to be even tighter in production.
 
+6. Data Accuracy & Idempotency
+Since the api doesn't require the full realtime, we implemented a 10s cache on metrics endpoint. Since idempotency is required, the `FINAL` statement is added to fetch the data after deduplication process is run which required by ClickHouse.
+
+
 ## 🔌 API Reference
 
 ### 1. Ingest a Single Event

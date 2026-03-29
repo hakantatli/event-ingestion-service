@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
@@ -14,13 +16,21 @@ type EventRepository interface {
 	GetMetrics(ctx context.Context, from, to int64, eventName string, groupBy string) (*domain.MetricResponse, error)
 }
 
+type cacheItem struct {
+	data      *domain.MetricResponse
+	expiresAt time.Time
+}
+
 type clickhouseEventRepo struct {
-	conn driver.Conn
+	conn  driver.Conn
+	cache map[string]cacheItem
+	mu    sync.RWMutex
 }
 
 func NewEventRepository(conn driver.Conn) EventRepository {
 	return &clickhouseEventRepo{
-		conn: conn,
+		conn:  conn,
+		cache: make(map[string]cacheItem),
 	}
 }
 
@@ -59,6 +69,16 @@ func (r *clickhouseEventRepo) InsertBatch(ctx context.Context, events []domain.E
 }
 
 func (r *clickhouseEventRepo) GetMetrics(ctx context.Context, from, to int64, eventName string, groupBy string) (*domain.MetricResponse, error) {
+	cacheKey := fmt.Sprintf("%d|%d|%s|%s", from, to, eventName, groupBy)
+
+	r.mu.RLock()
+	if item, found := r.cache[cacheKey]; found && time.Now().Before(item.expiresAt) {
+		r.mu.RUnlock()
+		fmt.Println("Cache hit for key:", cacheKey)
+		return item.data, nil
+	}
+	r.mu.RUnlock()
+
 	// Base query
 	query := `
 		SELECT 
@@ -81,7 +101,10 @@ func (r *clickhouseEventRepo) GetMetrics(ctx context.Context, from, to int64, ev
 		query += fmt.Sprintf(", %s as grouped_by", groupBy)
 	}
 
-	query += ` FROM events WHERE event_name = @event_name `
+	// Background deduplication in ClickHouse (ReplacingMergeTree) happens at unpredictable intervals (seconds to hours).
+	// Because the requirement strictly forbids duplicate data in the results, we MUST use FINAL.
+	// FINAL forces deduplication at read time, ensuring 100% accuracy at the cost of some query performance.
+	query += ` FROM events FINAL WHERE event_name = @event_name `
 
 	if from > 0 {
 		query += " AND timestamp >= toDateTime(@from) "
@@ -94,10 +117,6 @@ func (r *clickhouseEventRepo) GetMetrics(ctx context.Context, from, to int64, ev
 	if groupBy != "" {
 		query += fmt.Sprintf(" GROUP BY %s ", groupBy)
 	}
-
-	// Ensure we fetch data from deduplicated view at read (FINAL is expensive, but for precise analytics it's needed)
-	// Optionally use argMax if FINAL is too slow. Since metrics "does not need to be fully real-time", normal query is fine.
-	// ClickHouse ReplacingMergeTree will deduplicate in the background.
 
 	rows, err := r.conn.Query(ctx, query,
 		clickhouse.Named("event_name", eventName),
@@ -127,8 +146,8 @@ func (r *clickhouseEventRepo) GetMetrics(ctx context.Context, from, to int64, ev
 				"unique_event_count": uniqueCount,
 			})
 			resp.TotalEventCount += totalCount
-			// Note: Aggregate sums for total across groups is fine, unique count sum across groups won't be mathematically accurate overall
-			// without hyperloglog state or subqueries, but good enough for grouping display.
+			resp.UniqueEventCount += uniqueCount
+
 		} else {
 			if err := rows.Scan(&totalCount, &uniqueCount); err != nil {
 				return nil, err
@@ -137,6 +156,14 @@ func (r *clickhouseEventRepo) GetMetrics(ctx context.Context, from, to int64, ev
 			resp.UniqueEventCount = uniqueCount
 		}
 	}
+
+	// Cache the response for 10 seconds
+	r.mu.Lock()
+	r.cache[cacheKey] = cacheItem{
+		data:      resp,
+		expiresAt: time.Now().Add(10 * time.Second),
+	}
+	r.mu.Unlock()
 
 	return resp, nil
 }
