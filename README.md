@@ -2,8 +2,7 @@
 
 A high-performance backend service for ingesting raw event data and exposing aggregated analytical metrics. Built with Go 1.26 (standard library only — no frameworks) and ClickHouse, designed to handle sustained high-volume ingestion workloads.
 
-It can handle `350K` events/sec in bulk mode and `55K` events/sec in single mode
-
+It can handle `350K` events/sec in bulk mode and `55K` events/sec with 1ms latency in single mode.
 
 
 ##  How to run the project
@@ -20,9 +19,15 @@ Event data is append-only. We never update or delete rows. The primary read patt
 2. Why two separate ingestion endpoints?
 ClickHouse performs poorly with many tiny single row inserts — each creates a separate data "part" on disk. POST /events uses an async batcher to accumulate single events into large blocks before writing. POST /events/bulk lets clients who already have batched data skip the batcher and write directly. Different trade-offs: 202 (async, fast) vs 201 (sync, confirmed).
 
-1. What happens if the server crashes before the batcher flushes?
+3. What happens if the server crashes before the batcher flushes?
 Events in the memory buffer are lost. This is the explicit trade-off for high throughput. To mitigate: graceful shutdown drains the buffer on SIGTERM. For zero data loss in production, I'd put a durable message broker in front or use a que system like RabbitMQ.
 
+4. What could be done differently for the production
+* **Message Broker:** Implement a message broker such as Kafka or RabbitMQ before the ingestion service to ensure zero data loss and better handle traffic spikes.
+* **Observability:** Integrate metrics using tools like Prometheus to track batcher queue depth, flush latency, and error rates.
+* **Traffic Control:** Introduce rate limiting to prevent abuse and protect the system from being overwhelmed.
+* **Security:** Secure the API using an authentication mechanism like API keys or JWT tokens.
+* **Database Management:** Integrate a database migration tool to safely handle ClickHouse schema evolution.
 
 ## 🔌 API Reference
 
@@ -58,8 +63,8 @@ curl -X POST http://localhost:8080/events \
 curl -X POST http://localhost:8080/events/bulk \
   -H "Content-Type: application/json" \
   -d '[
-    {"event_name": "signup", "user_id": "user_1", "timestamp": 1723475612, "channel": "web"},
-    {"event_name": "purchase", "user_id": "user_2", "timestamp": 1723475700, "channel": "mobile"}
+    {"event_name": "signup", "user_id": "user_1", "timestamp": 1774723500, "channel": "web"},
+    {"event_name": "purchase", "user_id": "user_2", "timestamp": 1774723600, "channel": "mobile"}
   ]'
 ```
 

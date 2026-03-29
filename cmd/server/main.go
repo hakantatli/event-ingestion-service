@@ -41,6 +41,7 @@ func main() {
 	mux := http.NewServeMux()
 	// TODO: Rate limiting
 	// TODO: Authentication by api key or jwt token
+	// TODO: DB migrations for schema evolution
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
