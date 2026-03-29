@@ -1,0 +1,122 @@
+openapi: 3.0.3
+info:
+  title: Event Ingest Service API
+  version: 1.0.0
+  description: High-throughput event ingestion and metrics API connected to ClickHouse.
+servers:
+  - url: http://localhost:8080
+paths:
+  /events:
+    post:
+      summary: Ingest a single event
+      operationId: ingestEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Event'
+      responses:
+        '202':
+          description: Event queued for processing
+        '400':
+          description: Invalid payload or missing required fields
+  /events/bulk:
+    post:
+      summary: Ingest an array of events
+      operationId: ingestBulkEvents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/Event'
+      responses:
+        '202':
+          description: Events queued for processing
+  /metrics:
+    get:
+      summary: Retrieve aggregated metrics
+      operationId: getMetrics
+      parameters:
+        - name: event_name
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Filter by event name
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Unix timestamp for start
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Unix timestamp for end
+        - name: group_by
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [channel, campaign_id, toStartOfHour(timestamp), toStartOfDay(timestamp)]
+          description: Field to aggregate across
+      responses:
+        '200':
+          description: Aggregated data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsResponse'
+components:
+  schemas:
+    Event:
+      type: object
+      required:
+        - event_name
+        - user_id
+        - timestamp
+      properties:
+        event_name:
+          type: string
+          example: product_view
+        user_id:
+          type: string
+          example: user_987
+        timestamp:
+          type: integer
+          example: 1723475612
+        channel:
+          type: string
+          example: web
+        campaign_id:
+          type: string
+          example: cmp_123
+        tags:
+          type: array
+          items:
+            type: string
+          example: ["electronics", "flash_sale"]
+        metadata:
+          type: object
+          additionalProperties: {}
+          example:
+            product_id: "prod-789"
+            price: 129.99
+    MetricsResponse:
+      type: object
+      properties:
+        total_event_count:
+          type: integer
+        unique_event_count:
+          type: integer
+        grouped_data:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
